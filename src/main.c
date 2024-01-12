@@ -48,7 +48,7 @@ typedef struct _window {
     Window *connection; //wow you can connect it to another window
 };
 
-Window *wowawholebunchofmemory = {0}; //actual windows
+Window *winarray = {0}; //actual windows
 
 //create a window
 Window CreateWindow(Rectangle rect, char *title) {
@@ -94,9 +94,15 @@ void DeleteWindow(Window *w, int id) {
     //re id all the windows
 }
 
+enum winop {
+    NONE = 0,
+    DRAG,
+    CONNECT,
+};
+
 //Window *winarray[5] = {0};
 static bool mousePressed;
-static bool connectMode = 0;
+static int mode;
 static Window *conSrc;
 static float xdistance;
 static float ydistance;
@@ -106,52 +112,62 @@ int main(void) {
     InitWindow(WINDOW_W, WINDOW_H, TITLE);
     SetTargetFPS(60);
 
-    wowawholebunchofmemory = malloc(sizeof(Window) * 100);
-    wowawholebunchofmemory[0] = CreateWindow((Rectangle){30, 30, 100, 100}, "The Window");
-    wowawholebunchofmemory[1] = CreateWindow((Rectangle){30, 30, 100, 100}, "The Window 2");
-    //winarray[0] = &wowawholebunchofmemory[0];
-    wowawholebunchofmemory[0].connection = &wowawholebunchofmemory[1];
-    //winarray[1] = &wowawholebunchofmemory[1];
+    winarray = malloc(sizeof(Window) * 100); //space for 100 windows
+    winarray[0] = CreateWindow((Rectangle){30, 30, 100, 100}, "The Window");
+    winarray[1] = CreateWindow((Rectangle){30, 30, 100, 100}, "The Window 2");
+    winarray[0].connection = &winarray[1];
     
     //main loop
     while (!WindowShouldClose()) {
         BeginDrawing();
         ClearBackground(WHITE);
 
-        for (int i = 0; wowawholebunchofmemory[i].exists; i++) {
-            Window *p = &wowawholebunchofmemory[i];
-            
+        for (int i = 0; i < winid; i++) {
+            Window *p = &winarray[i];
+
+            switch (mode) {
+            case DRAG:
+                DrawText("Mode: Drag", WINDOW_H - 20, 0, 20, BLACK);
+                wp->params.bounds.x = GetMousePosition().x - xdistance;
+                wp->params.bounds.y = GetMousePosition().y - ydistance;
+                goto EXIT;
+            case CONNECT:
+                DrawText("Mode: Connect", WINDOW_H - 20, 0, 20, BLACK);
+                Vector2 v = {
+                    .x = wp->params.bounds.x + wp->params.bounds.width,
+                    .y = wp->params.bounds.y + wp->params.bounds.height / 2,
+
+                };
+                DrawLineBezier(v, GetMousePosition(), 1.0, GREEN);
+
+                //check if clicked on window
+                if ( (CheckCollisionPointRec(GetMousePosition(), p->params.bounds)) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    wp->connection = p;
+                    mode = NONE;
+                }
+
+                goto EXIT;
+            case NONE:
+                DrawText("Mode: None", WINDOW_H - 20, 0, 20, BLACK);
+
+            }
+    
+EXIT:
             //window drag
             if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 
-                //check if mouse is inside window
+                //check if mouse is inside window and pressed
                 if (CheckCollisionPointRec(GetMousePosition(), p->params.bounds)) {
                     xdistance = GetMousePosition().x - p->params.bounds.x;
                     ydistance = GetMousePosition().y - p->params.bounds.y;
                     //windowID = p;
                     wp = p;
-                    mousePressed = true;
-                    
-                    if (connectMode) {
-                        Vector2 v = {
-                            .x = conSrc->params.bounds.x,
-                            .y = conSrc->params.bounds.y,
-                        };
-                        //DrawLineBezier(v, GetMousePosition(), 1.0, GREEN);
-                        conSrc->connection = p;
-                        connectMode = false;
-                    }
+                    mode = DRAG;
                 }
             }
 
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                mousePressed = false;
-            }
-
-            if (mousePressed) {
-                wp->params.bounds.x = GetMousePosition().x - xdistance;
-                wp->params.bounds.y = GetMousePosition().y - ydistance;
-                //printf("%p\n", windowID);
+                mode = NONE;
             }
 
             if (!p->exists) {
@@ -159,18 +175,9 @@ int main(void) {
             }
 
             if ( GuiWindowBox(p->params.bounds, p->params.title)) {
-                DeleteWindow(wowawholebunchofmemory, p->id);
+                DeleteWindow(winarray, p->id);
             }
-            
-            if (connectMode) {
-                Vector2 v = {
-                            .x = conSrc->params.bounds.x,
-                            .y = conSrc->params.bounds.y,
-                        };
-                DrawLineBezier(v, GetMousePosition(), 1.0, GREEN);
-
-            }
-            
+                
             if (p->connection == NULL) {
                 Rectangle b_rec = (Rectangle){
                     .x = p->params.bounds.x + p->params.bounds.width - 35 - 1,
@@ -180,10 +187,21 @@ int main(void) {
                 };
 
                 if (GuiButton(b_rec, "connect")) {
-                    connectMode = true;
-                    conSrc = p;
+                    mode = CONNECT;
+                    wp = p;
                 }
                 continue;
+            } else {
+                Rectangle b_rec = (Rectangle){
+                    .x = p->params.bounds.x + p->params.bounds.width - 35 - 1,
+                    .y = p->params.bounds.y + p->params.bounds.height - 25 - 1,
+                    .width = 35,
+                    .height = 25,
+                };
+
+                if (GuiButton(b_rec, "disconnect")) {
+                    p->connection->connection = NULL;
+                }
             }
             
             static Vector2 start;
@@ -203,8 +221,8 @@ int main(void) {
         if ( GuiButton((Rectangle){1, 1, 30, 20}, "New") ) {
             Window new = CreateWindow((Rectangle){50, 50, 100, 100}, "yah");
             new.exists = true;
-            new.connection = &wowawholebunchofmemory[0];
-            memcpy(&wowawholebunchofmemory[winid - 1], &new, sizeof(Window));
+            new.connection = &winarray[0];
+            memcpy(&winarray[winid - 1], &new, sizeof(Window));
         }
 
         EndDrawing();
